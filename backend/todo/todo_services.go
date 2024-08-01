@@ -1,6 +1,11 @@
-package main
+package todo
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/phihc116/reactjs-todo-list/db"
+	"go.mongodb.org/mongo-driver/mongo"
+)
 
 type TodoInterface interface {
 	CreateTodo(todo Todo) error
@@ -10,11 +15,13 @@ type TodoInterface interface {
 }
 
 type TodoService struct {
-	todos []Todo
+	todos      []Todo
+	collection *mongo.Collection
 }
 
 func NewTodoService() *TodoService {
-	return &TodoService{make([]Todo, 0)}
+	collection := db.MongoCtx.Database.Collection("todos")
+	return &TodoService{make([]Todo, 0), collection}
 }
 
 func (s *TodoService) CreateTodo(todo Todo) error {
