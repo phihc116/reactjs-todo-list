@@ -18,11 +18,6 @@ func initMongo() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() {
-		if err := db.Disconnect(); err != nil {
-			log.Fatal(err)
-		}
-	}()
 }
 
 func loadEnv() {
@@ -36,7 +31,13 @@ func main() {
 	app := fiber.New()
 
 	loadEnv()
+
 	initMongo()
+	defer func() {
+		if err := db.Disconnect(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	controller := todo.NewTodoController()
 	controller.RegisterRoutes(app)

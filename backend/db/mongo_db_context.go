@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -24,6 +25,9 @@ func InitializeMongoDBContext(uri, dbName string) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("Connected Success!")
+
 	MongoCtx = &MongoDBContext{
 		Client:   client,
 		Database: client.Database(dbName),

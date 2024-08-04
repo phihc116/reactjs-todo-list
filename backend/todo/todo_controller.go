@@ -1,9 +1,8 @@
 package todo
 
 import (
-	"strconv"
-
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type TodoController struct {
@@ -19,39 +18,53 @@ func (controller *TodoController) CreateTodo(c *fiber.Ctx) error {
 	if err := c.BodyParser(&todo); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	if err := controller.service.CreateTodo(todo); err != nil {
+
+	resultId, err := controller.service.CreateTodo(todo)
+
+	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.Status(fiber.StatusCreated).JSON(todo)
+	return c.Status(fiber.StatusCreated).JSON(resultId)
 }
 
 func (controller *TodoController) GetList(c *fiber.Ctx) error {
-	todos := controller.service.GetList()
+	todos, err := controller.service.GetList()
+
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
 	return c.JSON(todos)
 }
 
 func (controller *TodoController) UpdateTodo(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid ID"})
+	var todo TodoRequestUpdate
+	if err := c.BodyParser(&todo); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	todo, err := controller.service.UpdateTodo(id)
+	result, err := controller.service.UpdateTodo(todo)
 
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	return c.JSON(todo)
+	return c.JSON(result)
 }
 
 func (controller *TodoController) DeleteTodo(c *fiber.Ctx) error {
-	id, err := strconv.Atoi(c.Params("id"))
+	id := c.Params("id")
+
+	objectId, err := primitive.ObjectIDFromHex(id)
+
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid ID"})
+		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 	}
-	if err := controller.service.DeleteTodo(id); err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	result, err := controller.service.DeleteTodo(objectId)
+
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
-	return c.SendStatus(fiber.StatusNoContent)
+
+	return c.JSON(result)
 }

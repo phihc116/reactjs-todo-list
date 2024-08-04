@@ -1,17 +1,21 @@
 package todo
 
 import (
+	"context"
 	"errors"
+	"time"
 
 	"github.com/phihc116/reactjs-todo-list/db"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type TodoInterface interface {
-	CreateTodo(todo Todo) error
-	GetList() []Todo
-	UpdateTodo(id int) (Todo, error)
-	DeleteTodo(id int) error
+	CreateTodo(todo Todo) (interface{}, error)
+	GetList() ([]TodoDto, error)
+	UpdateTodo(todoRequestUpdate TodoRequestUpdate) (bool, error)
+	DeleteTodo(id primitive.ObjectID) (bool, error)
 }
 
 type TodoService struct {
@@ -24,35 +28,72 @@ func NewTodoService() *TodoService {
 	return &TodoService{make([]Todo, 0), collection}
 }
 
-func (s *TodoService) CreateTodo(todo Todo) error {
-	if todo.Body == "" {
-		return errors.New("todo body cannot be empty")
+func (s *TodoService) CreateTodo(todo Todo) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res, err := s.collection.InsertOne(ctx, todo)
+	if err != nil {
+		return nil, err
 	}
-	todo.ID = len(s.todos) + 1
-	s.todos = append(s.todos, todo)
-	return nil
+
+	return res.InsertedID, nil
 }
 
-func (s *TodoService) GetList() []Todo {
-	return s.todos
-}
+func (s *TodoService) GetList() ([]TodoDto, error) {
+	var toDos []TodoDto
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-func (s *TodoService) UpdateTodo(id int) (Todo, error) {
-	for i, todo := range s.todos {
-		if todo.ID == id {
-			s.todos[i].Completed = !s.todos[i].Completed
-			return s.todos[i], nil
+	cur, err := s.collection.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	for cur.Next(ctx) {
+		var todo TodoDto
+		if err := cur.Decode(&todo); err != nil {
+			return nil, err
 		}
+		toDos = append(toDos, todo)
 	}
-	return Todo{}, errors.New("todo not found")
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return toDos, nil
 }
 
-func (s *TodoService) DeleteTodo(id int) error {
-	for i, todo := range s.todos {
-		if todo.ID == id {
-			s.todos = append(s.todos[:i], s.todos[i+1:]...)
-			return nil
-		}
+func (s *TodoService) UpdateTodo(todo TodoRequestUpdate) (bool, error) {
+	filter := bson.D{{Key: "_id", Value: todo.ID}}
+
+	update := bson.D{{
+		Key: "$set", Value: bson.D{{Key: "completed", Value: todo.Completed}, {Key: "body", Value: todo.Body}},
+	}}
+
+	result, err := s.collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return false, err
 	}
-	return errors.New("todo not found")
+
+	if result.MatchedCount == 0 {
+		return false, errors.New("no documents matched the provided ID")
+	}
+
+	return true, nil
+}
+
+func (s *TodoService) DeleteTodo(id primitive.ObjectID) (bool, error) {
+
+	filter := bson.D{{Key: "_id", Value: id}}
+
+	_, err := s.collection.DeleteOne(context.Background(), filter)
+
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
